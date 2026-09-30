@@ -6,7 +6,6 @@ namespace PoPWPSchema\BlockContentParser;
 
 use DOMNode;
 use PoPWPSchema\BlockContentParser\Exception\BlockContentParserException;
-use PoPCMSSchema\CustomPosts\TypeAPIs\CustomPostTypeAPIInterface;
 use PoPWPSchema\BlockContentParser\ObjectModels\BlockContentParserPayload;
 use PoP\ComponentModel\StaticHelpers\MethodHelpers;
 use PoP\DOMCrawler\Crawler;
@@ -35,18 +34,6 @@ class BlockContentParser extends AbstractBasicService implements BlockContentPar
 {
     private bool $includeInnerContent = false;
 
-    private ?CustomPostTypeAPIInterface $customPostTypeAPI = null;
-
-    final protected function getCustomPostTypeAPI(): CustomPostTypeAPIInterface
-    {
-        if ($this->customPostTypeAPI === null) {
-            /** @var CustomPostTypeAPIInterface */
-            $customPostTypeAPI = $this->instanceManager->getInstance(CustomPostTypeAPIInterface::class);
-            $this->customPostTypeAPI = $customPostTypeAPI;
-        }
-        return $this->customPostTypeAPI;
-    }
-
     /**
      * @param array<string,mixed> $options An associative array of options. Can contain keys:
      *              'filter': An associative array of options for filtering blocks. Can contain keys:
@@ -72,7 +59,7 @@ class BlockContentParser extends AbstractBasicService implements BlockContentPar
                 return null;
             }
         }
-        $customPostContent = (string) $this->getCustomPostTypeAPI()->getRawContent($customPost);
+        $customPostContent = $customPost->post_content;
         // If the post has no content, don't parse it or it'll produce an error
         if ($customPostContent === '') {
             return new BlockContentParserPayload(
