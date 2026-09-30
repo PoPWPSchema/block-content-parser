@@ -6,6 +6,7 @@ namespace PoPWPSchema\BlockContentParser;
 
 use DOMNode;
 use PoPWPSchema\BlockContentParser\Exception\BlockContentParserException;
+use PoPCMSSchema\CustomPosts\TypeAPIs\CustomPostTypeAPIInterface;
 use PoPWPSchema\BlockContentParser\ObjectModels\BlockContentParserPayload;
 use PoP\ComponentModel\StaticHelpers\MethodHelpers;
 use PoP\DOMCrawler\Crawler;
@@ -32,7 +33,37 @@ use function parse_blocks;
  */
 class BlockContentParser extends AbstractBasicService implements BlockContentParserInterface
 {
+    /**
+     * Attributes that WordPress registers without the source their value is
+     * saved in, by block and attribute name.
+     *
+     * Since WordPress 7.1, `core/html` declares its `content` with no source
+     * (only `"role": "local"`), while the block goes on saving it as its
+     * inner HTML. Read as unsourced, the attribute was looked for in the
+     * block's delimiter, where it never is, so the block came back with no
+     * content at all.
+     *
+     * @var array<string,array<string,string>>
+     */
+    private const ATTRIBUTE_SOURCES_MISSING_FROM_REGISTRATION = [
+        'core/html' => [
+            'content' => 'raw',
+        ],
+    ];
+
     private bool $includeInnerContent = false;
+
+    private ?CustomPostTypeAPIInterface $customPostTypeAPI = null;
+
+    final protected function getCustomPostTypeAPI(): CustomPostTypeAPIInterface
+    {
+        if ($this->customPostTypeAPI === null) {
+            /** @var CustomPostTypeAPIInterface */
+            $customPostTypeAPI = $this->instanceManager->getInstance(CustomPostTypeAPIInterface::class);
+            $this->customPostTypeAPI = $customPostTypeAPI;
+        }
+        return $this->customPostTypeAPI;
+    }
 
     /**
      * @param array<string,mixed> $options An associative array of options. Can contain keys:
@@ -59,7 +90,7 @@ class BlockContentParser extends AbstractBasicService implements BlockContentPar
                 return null;
             }
         }
-        $customPostContent = $customPost->post_content;
+        $customPostContent = (string) $this->getCustomPostTypeAPI()->getRawContent($customPost);
         // If the post has no content, don't parse it or it'll produce an error
         if ($customPostContent === '') {
             return new BlockContentParserPayload(
@@ -345,6 +376,13 @@ class BlockContentParser extends AbstractBasicService implements BlockContentPar
         $block_attributes = $block['attrs'];
 
         foreach ($block_definition_attributes as $block_attribute_name => $block_attribute_definition) {
+            if (
+                !isset($block_attribute_definition['source'])
+                && isset(self::ATTRIBUTE_SOURCES_MISSING_FROM_REGISTRATION[$block_name][$block_attribute_name])
+            ) {
+                $block_attribute_definition['source'] = self::ATTRIBUTE_SOURCES_MISSING_FROM_REGISTRATION[$block_name][$block_attribute_name];
+            }
+
             $attribute_source        = $block_attribute_definition['source'] ?? null;
             $attribute_default_value = $block_attribute_definition['default'] ?? null;
 
